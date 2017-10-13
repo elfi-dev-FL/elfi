@@ -5,10 +5,11 @@ dev
 ---
 - Added new example: the stochastic Lotka-Volterra model
 - Fix methods.bo.utils.minimize to be strictly within bounds
-- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics  
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
 - Added the MaxVar acquisition method
 - Added the RandMaxVar acquisition method
 - Fix elfi.Distance to support scipy 1.0.0
+- Implemented model selection (elfi.compare_models). See API documentation.
 
 0.6.3 (2017-09-28)
 ------------------
