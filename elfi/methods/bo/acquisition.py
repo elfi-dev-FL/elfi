@@ -154,6 +154,73 @@ class AcquisitionBase:
         return x
 
 
+class ExpectedImprovement(AcquisitionBase):
+    r"""Expected Improvement Selection Criterion.
+
+    References
+    ----------
+    E. Brochu, V.M. Cora, and N. de Freitas. A tutorial on Bayesian optimization of expensive
+    cost functions, with application to active user modeling and hierarchical reinforcement
+    learning. arXiv:1012.2599, 2010.
+
+    """
+    
+    def __init__(self, *args, **kwargs):
+        """Initialize Expected Improvement.
+
+        Parameters
+        ----------
+        args
+        kwargs
+
+        """
+        super(ExpectedImprovement, self).__init__(*args, **kwargs)
+        self.name = 'expected_improvement'
+        self.label_fn = 'Expected Improvement'
+    
+    def evaluate(self, x, t=None):
+        r"""Evaluate the expected improvement selection criterion.
+
+        mean - sqrt(\beta_t) * std
+
+        Parameters
+        ----------
+        x : numpy.array
+        t : int
+            Current iteration (starting from 0).
+
+        """
+        mean, var = self.model.predict(x, noiseless=True)
+
+        sigma = np.sqrt(var)
+        y_min = self.model.Y.min()
+        z = -(mean-y_min)/sigma
+
+        return -sigma*(z*ss.distributions.norm(0,1).cdf(z)+ss.distributions.norm(0,1).pdf(z))
+    
+    def evaluate_gradient(self, x, t=None):
+        """Evaluate the gradient of the expected improvement selection criterion.
+
+        Parameters
+        ----------
+        x : numpy.array
+        t : int
+            Current iteration (starting from 0).
+
+        """
+        mean, var = self.model.predict(x, noiseless=True)
+        grad_mean, grad_var = self.model.predictive_gradients(x)
+        
+        sigma = np.sqrt(var)
+        grad_sigma = - 0.5 * grad_var / sigma
+        
+        y_min = self.model.Y.min()
+        z = -(mean-y_min)/sigma
+        grad_z = -z*grad_sigma/sigma - grad_mean/sigma
+        
+        return - grad_sigma * (z*ss.distributions.norm(0,1).cdf(z)+ss.distributions.norm(0,1).pdf(z)) + sigma * grad_z*ss.distributions.norm(0,1).cdf(z)
+
+
 class LCBSC(AcquisitionBase):
     r"""Lower Confidence Bound Selection Criterion.
 
