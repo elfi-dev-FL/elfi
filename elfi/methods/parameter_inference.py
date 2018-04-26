@@ -280,7 +280,7 @@ class ParameterInference:
         # Submit new batches if allowed
         while self._allow_submit(self.batches.next_index):
             next_batch = self.prepare_new_batch(self.batches.next_index)
-            logger.debug("Submitting batch %d" % self.batches.next_index)
+            logger.info("Submitting batch %d" % self.batches.next_index)
             self.batches.submit(next_batch)
 
         # Handle the next ready batch in succession
@@ -581,19 +581,23 @@ class Rejection(Sampler):
 
         This feature is still experimental and only supports 1d or 2d cases.
         """
-        displays = []
-        if options.get('interactive'):
-            from IPython import display
-            displays.append(
-                display.HTML('<span>Threshold: {}</span>'.format(self.state['threshold'])))
+        n_dim = self.target_model.input_dim
+        
+        if n_dim in {1,2}:
+            displays = []
+            if options.get('interactive'):
+                from IPython import display
+                displays.append(
+                    display.HTML('<span>Threshold: {}</span>'.format(self.state['threshold'])))
 
-        visin.plot_sample(
-            self.state['samples'],
-            nodes=self.parameter_names,
-            n=self.objective['n_samples'],
-            displays=displays,
-            **options)
-
+            visin.plot_sample(
+                self.state['samples'],
+                nodes=self.parameter_names,
+                n=self.objective['n_samples'],
+                displays=displays,
+                **options)
+        else:
+            raise NotImplementedError("Currently only supports 1- and 2-dimensional models")
 
 class SMC(Sampler):
     """Sequential Monte Carlo ABC sampler."""
@@ -1043,57 +1047,94 @@ class BayesianOptimization(ParameterInference):
     def plot_state(self, **options):
         """Plot the GP surface.
 
-        This feature is still experimental and currently supports only 2D cases.
+        This feature is still experimental and currently supports only 1D and 2D cases.
         """
-        f = plt.gcf()
-        if len(f.axes) < 2:
-            f, _ = plt.subplots(1, 2, figsize=(13, 6), sharex='row', sharey='row')
+        n_dim = self.target_model.input_dim
+        
+        if n_dim==1:
+            f = plt.gcf()
+            if len(f.axes) < 2:
+                f, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 6), sharex='row')
+            
+            gp = self.target_model
+            
+            # Draw the GP prediction
+            x_arr = np.linspace(gp.bounds[0][0], gp.bounds[0][1],100.)
+            y_m, y_e = gp.predict(x_arr)
+            y_m = y_m.T[0]
+            y_e = y_e.T[0]
+            x_p = gp._gp.X[:, 0]
+            y_p = gp._gp.Y[:, 0]
+            
+            ax1.scatter(x_p, y_p, color='black', s=2.5)
+            ax1.scatter(x_p[len(x_p)-1], y_p[len(x_p)-1], color='red', s=8.5)
+            ax1.plot(x_arr, y_m)
+            ax1.fill_between(x_arr, y_m-y_e, y_m+y_e, alpha=0.3)
+            ax1.set_ylabel('Discrepancy')
+            ax1.set_xlabel(self.parameter_names[0])
+            ax1.set_title('GP target')
+            
+            # Draw the acquisition function
+            acq = self.acquisition_method.evaluate(x_arr, len(gp.X))
+            
+            ax2.plot(x_arr, acq)
+            ax2.set_ylabel('Acquisition')
+            ax2.set_xlabel(self.parameter_names[0])
+            ax2.set_title('Acquisition function')
+            
+        elif n_dim==2:
+            f = plt.gcf()
+            if len(f.axes) < 2:
+                f, _ = plt.subplots(1, 2, figsize=(13, 6), sharex='row', sharey='row')
 
-        gp = self.target_model
+            gp = self.target_model
 
-        # Draw the GP surface
-        visin.draw_contour(
-            gp.predict_mean,
-            gp.bounds,
-            self.parameter_names,
-            title='GP target surface',
-            points=gp.X,
-            axes=f.axes[0],
-            **options)
+            # Draw the GP surface
+            visin.draw_contour(
+                gp.predict_mean,
+                gp.bounds,
+                self.parameter_names,
+                title='GP target surface',
+                points=gp.X,
+                axes=f.axes[0],
+                **options)
 
-        # Draw the latest acquisitions
-        if options.get('interactive'):
-            point = gp.X[-1, :]
-            if len(gp.X) > 1:
-                f.axes[1].scatter(*point, color='red')
+            # Draw the latest acquisitions
+            if options.get('interactive'):
+                point = gp.X[-1, :]
+                if len(gp.X) > 1:
+                    f.axes[1].scatter(*point, color='red')
 
-        displays = [gp._gp]
+            displays = [gp._gp]
 
-        if options.get('interactive'):
-            from IPython import display
-            displays.insert(
-                0,
-                display.HTML('<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
-                    len(gp.Y), gp.Y[-1][0], point)))
+            if options.get('interactive'):
+                from IPython import display
+                displays.insert(
+                    0,
+                    display.HTML('<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
+                        len(gp.Y), gp.Y[-1][0], point)))
 
-        # Update
-        visin._update_interactive(displays, options)
+            # Update
+            visin._update_interactive(displays, options)
 
-        def acq(x):
-            return self.acquisition_method.evaluate(x, len(gp.X))
+            def acq(x):
+                return self.acquisition_method.evaluate(x, len(gp.X))
 
-        # Draw the acquisition surface
-        visin.draw_contour(
-            acq,
-            gp.bounds,
-            self.parameter_names,
-            title='Acquisition surface',
-            points=None,
-            axes=f.axes[1],
-            **options)
+            # Draw the acquisition surface
+            visin.draw_contour(
+                acq,
+                gp.bounds,
+                self.parameter_names,
+                title='Acquisition surface',
+                points=None,
+                axes=f.axes[1],
+                **options)
 
-        if options.get('close'):
-            plt.close()
+            if options.get('close'):
+                plt.close()
+        else:
+            raise NotImplementedError("Currently only supports 2-dimensional models")
+
 
     def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.
