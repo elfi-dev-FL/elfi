@@ -166,7 +166,7 @@ class Sample(ParameterInferenceResult):
     def sample_means_summary(self):
         """Print a representation of sample means."""
         s = "Sample means: "
-        s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
+        s += ', '.join(["{}: {:}".format(k, v) for k, v in self.sample_means.items()])
         print(s)
 
     @property

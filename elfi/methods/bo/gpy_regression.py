@@ -251,12 +251,14 @@ class GPyRegression:
         else:
             kernel = self.gp_params.get('kernel')
 
-        noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
+        noise_var = self.gp_params.get('noise_var') if self.gp_params.get('noise_var') is not None else np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
         self._gp = self._make_gpy_instance(
             x, y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
     def _default_kernel(self, x, y):
+        logger.debug("Using default kernel")
+        
         # Some heuristics to choose kernel parameters based on the initial data
         length_scale = (np.max(self.bounds) - np.min(self.bounds)) / 3.
         kernel_var = (np.max(y) / 3.)**2.
