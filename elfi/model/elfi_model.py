@@ -379,6 +379,10 @@ class ElfiModel(GraphicalModel):
         if len(parameter_names) > 0:
             raise ValueError('Parameters {} not found from the model'.format(parameter_names))
 
+    @property
+    def parameter_dims(self):
+        return [self.get_state(n)['_dim'] for n in self.parameter_names]
+
     def copy(self):
         """Return a copy of the ElfiModel instance.
 
@@ -482,7 +486,7 @@ class NodeReference(InstructionsMapper):
 
     """
 
-    def __init__(self, *parents, state=None, model=None, name=None):
+    def __init__(self, *parents, state=None, model=None, name=None, dim=None):
         """Initialize a NodeReference.
 
         Parameters
@@ -882,6 +886,7 @@ class Prior(RandomVariable):
         """
         super(Prior, self).__init__(distribution, *params, size=size, **kwargs)
         self['_parameter'] = True
+        self['_dim'] = kwargs['dim'] if 'dim' in kwargs else 1
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):

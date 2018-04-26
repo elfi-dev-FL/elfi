@@ -319,7 +319,7 @@ class ModelPrior:
         """
         model = model.copy()
         self.parameter_names = model.parameter_names
-        self.dim = len(self.parameter_names)
+        self.dim = np.sum(model.parameter_dims)
         self.client = Client()
 
         # Prepare nets for the pdf methods

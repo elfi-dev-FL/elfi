@@ -115,6 +115,6 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
 
-    if nodes:
-        plt.xlabel(nodes[0])
-        plt.ylabel(nodes[1])
+    #if nodes:
+        #plt.xlabel(nodes[0])
+        #plt.ylabel(nodes[1])
