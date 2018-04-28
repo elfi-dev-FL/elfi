@@ -319,7 +319,8 @@ class ModelPrior:
         """
         model = model.copy()
         self.parameter_names = model.parameter_names
-        self.dim = np.sum(model.parameter_dims)
+        self.parameter_dims = model.parameter_dims
+        self.dim = np.sum([self.parameter_dims[n] for n in self.parameter_names])
         self.client = Client()
 
         # Prepare nets for the pdf methods
@@ -364,9 +365,9 @@ class ModelPrior:
         else:
             net = self._pdf_net
             node = self._pdf_node
-
+        
         x = np.asanyarray(x)
-        ndim = x.ndim
+        #ndim = x.ndim
         x = x.reshape((-1, self.dim))
         batch = self._to_batch(x)
 
@@ -380,8 +381,8 @@ class ModelPrior:
             loaded_net.node[k] = {'output': v}
 
         val = self.client.compute(loaded_net)[node]
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            val = val[0]
+        #if ndim == 0 or (ndim == 1 and self.dim > 1):
+            #val = val[0]
 
         return val
 
@@ -400,7 +401,7 @@ class ModelPrior:
 
         """
         x = np.asanyarray(x)
-        ndim = x.ndim
+        #ndim = x.ndim
         x = x.reshape((-1, self.dim))
 
         grads = np.zeros_like(x)
@@ -412,9 +413,14 @@ class ModelPrior:
         grads[np.isinf(grads)] = 0
         grads[np.isnan(grads)] = 0
 
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            grads = grads[0]
+        #if ndim == 0 or (ndim == 1 and self.dim > 1):
+            #grads = grads[0]
         return grads
 
     def _to_batch(self, x):
-        return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
+        result = {}
+        i=0
+        for dummy, p in enumerate(self.parameter_names):
+            result[p] = np.stack([x[:,j] for j in range(i,i+self.parameter_dims[p])], axis=-1)
+            i+=1
+        return result

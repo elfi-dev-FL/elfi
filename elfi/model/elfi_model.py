@@ -381,7 +381,7 @@ class ElfiModel(GraphicalModel):
 
     @property
     def parameter_dims(self):
-        return [self.get_state(n)['_dim'] for n in self.parameter_names]
+        return {n: self.get_state(n)['_dim'] for n in self.parameter_names}
 
     def copy(self):
         """Return a copy of the ElfiModel instance.
