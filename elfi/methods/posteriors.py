@@ -32,13 +32,16 @@ class BolfiPosterior:
 
     """
 
-    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
+    def __init__(self, model, parametric=False, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
         """Initialize a BOLFI posterior.
 
         Parameters
         ----------
         model : elfi.bo.gpy_regression.GPyRegression
             Instance of the surrogate model
+        parametric : bool, optional
+            True if the model works with a parametric approximation of the likelihood,
+            False otherwise. Default False.
         threshold : float, optional
             The threshold value used in the calculation of the posterior, see the BOLFI paper
             for details. By default, the minimum value of discrepancy estimate mean is used.
@@ -52,6 +55,7 @@ class BolfiPosterior:
 
         """
         super(BolfiPosterior, self).__init__()
+        self.parametric = parametric
         self.threshold = threshold
         self.model = model
         self.random_state = np.random.RandomState(seed)
@@ -132,7 +136,7 @@ class BolfiPosterior:
 
     def _unnormalized_loglikelihood(self, x):
         x = np.asanyarray(x)
-        ndim = x.ndim
+        #ndim = x.ndim
         x = x.reshape((-1, self.dim))
 
         logpdf = -np.ones(len(x)) * np.inf
@@ -145,11 +149,16 @@ class BolfiPosterior:
             return logpdf
 
         mean, var = self.model.predict(x)
-        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
+        if self.parametric:
+            logpdf[logi] = (-mean/2.).squeeze()
+            #logpdf[logi] = (-mean/2. + var/8.).squeeze()
+        else:
+            logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
 
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            logpdf = logpdf[0]
-
+        #if ndim == 0 or (ndim == 1 and self.dim > 1):
+            #logpdf = logpdf[0]
+        
+        #print(logpdf)
         return logpdf
 
     def _gradient_unnormalized_loglikelihood(self, x):
@@ -170,14 +179,18 @@ class BolfiPosterior:
         std = np.sqrt(var)
 
         grad_mean, grad_var = self.model.predictive_gradients(x)
+        
+        if self.parametric:
+            grad[logi, :] = (-grad_mean/2.).squeeze()
+            #grad[logi, :] = (-grad_mean/2. + grad_var/8.).squeeze()
+        else:
+            factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
+            factor = factor / var
+            term = (self.threshold - mean) / std
+            pdf = ss.norm.pdf(term)
+            cdf = ss.norm.cdf(term)
 
-        factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
-        factor = factor / var
-        term = (self.threshold - mean) / std
-        pdf = ss.norm.pdf(term)
-        cdf = ss.norm.cdf(term)
-
-        grad[logi, :] = factor * pdf / cdf
+            grad[logi, :] = factor * pdf / cdf
 
         if ndim == 0 or (ndim == 1 and self.dim > 1):
             grad = grad[0]

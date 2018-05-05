@@ -383,7 +383,8 @@ class ModelPrior:
         val = self.client.compute(loaded_net)[node]
         #if ndim == 0 or (ndim == 1 and self.dim > 1):
             #val = val[0]
-
+        val = val.squeeze()
+        
         return val
 
     def gradient_pdf(self, x):

@@ -1177,7 +1177,7 @@ class BOLFI(BayesianOptimization):
 
     """
 
-    def fit(self, n_evidence, threshold=None):
+    def fit(self, n_evidence, parametric=False, threshold=None):
         """Fit the surrogate model.
 
         Generates a regression model for the discrepancy given the parameters.
@@ -1186,6 +1186,9 @@ class BOLFI(BayesianOptimization):
 
         Parameters
         ----------
+        parametric : bool, optional
+            True if the model works with a parametric approximation of the likelihood,
+            False otherwise. Default False.
         threshold : float, optional
             Discrepancy threshold for creating the posterior (log with log discrepancy).
 
@@ -1197,15 +1200,18 @@ class BOLFI(BayesianOptimization):
                 'You must specify the number of evidence (n_evidence) for the fitting')
 
         self.infer(n_evidence)
-        return self.extract_posterior(threshold)
+        return self.extract_posterior(parametric, threshold)
 
-    def extract_posterior(self, threshold=None):
+    def extract_posterior(self, parametric=False, threshold=None):
         """Return an object representing the approximate posterior.
 
         The approximation is based on surrogate model regression.
 
         Parameters
         ----------
+        parametric : bool, optional
+            True if the model works with a parametric approximation of the likelihood,
+            False otherwise. Default False.
         threshold: float, optional
             Discrepancy threshold for creating the posterior (log with log discrepancy).
 
@@ -1215,14 +1221,16 @@ class BOLFI(BayesianOptimization):
 
         """
         if self.state['n_batches'] == 0:
-            raise ValueError('Model is not fitted yet, please see the `fit` method.')
+            #raise ValueError('Model is not fitted yet, please see the `fit` method.')
+            logger.warning("Model is not fitted yet, please see the `fit` method.")
 
-        return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
+        return BolfiPosterior(self.target_model, parametric=parametric, threshold=threshold, prior=ModelPrior(self.model))
 
     def sample(self,
                n_samples,
                warmup=None,
                n_chains=4,
+               parametric=False,
                threshold=None,
                initials=None,
                algorithm='nuts',
@@ -1249,6 +1257,9 @@ class BOLFI(BayesianOptimization):
             Length of warmup sequence in MCMC sampling. Defaults to n_samples//2.
         n_chains : int, optional
             Number of independent chains.
+        parametric : bool, optional
+            True if the model works with a parametric approximation of the likelihood,
+            False otherwise. Default False.
         threshold : float, optional
             The threshold (bandwidth) for posterior (give as log if log discrepancy).
         initials : np.array of shape (n_chains, n_params), optional
@@ -1269,7 +1280,7 @@ class BOLFI(BayesianOptimization):
 
         # TODO: other MCMC algorithms
 
-        posterior = self.extract_posterior(threshold)
+        posterior = self.extract_posterior(parametric, threshold)
         warmup = warmup or n_samples // 2
 
         # Unless given, select the evidence points with smallest discrepancy

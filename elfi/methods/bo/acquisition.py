@@ -190,13 +190,15 @@ class ExpectedImprovement(AcquisitionBase):
             Current iteration (starting from 0).
 
         """
+        phi = ss.norm.pdf
+        Phi = ss.norm.cdf
         mean, var = self.model.predict(x, noiseless=True)
 
         sigma = np.sqrt(var)
         y_min = self.model.Y.min()
         z = -(mean-y_min)/sigma
 
-        return -sigma*(z*ss.distributions.norm(0,1).cdf(z)+ss.distributions.norm(0,1).pdf(z))
+        return -sigma*(z*Phi(z)+phi(z))
     
     def evaluate_gradient(self, x, t=None):
         """Evaluate the gradient of the expected improvement selection criterion.
@@ -208,6 +210,8 @@ class ExpectedImprovement(AcquisitionBase):
             Current iteration (starting from 0).
 
         """
+        phi = ss.norm.pdf
+        Phi = ss.norm.cdf
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
         
@@ -218,7 +222,7 @@ class ExpectedImprovement(AcquisitionBase):
         z = -(mean-y_min)/sigma
         grad_z = -z*grad_sigma/sigma - grad_mean/sigma
         
-        return - grad_sigma * (z*ss.distributions.norm(0,1).cdf(z)+ss.distributions.norm(0,1).pdf(z)) + sigma * grad_z*ss.distributions.norm(0,1).cdf(z)
+        return -grad_sigma*(z*Phi(z)+phi(z)) + sigma*grad_z*Phi(z)
 
 
 class LCBSC(AcquisitionBase):
@@ -342,13 +346,15 @@ class MaxVar(AcquisitionBase):
 
     """
 
-    def __init__(self, quantile_eps=.01, *args, **opts):
+    def __init__(self, quantile_eps=.01, use_prior=True, *args, **opts):
         """Initialise MaxVar.
 
         Parameters
         ----------
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the ABC threshold.
+        use_prior : bool, optional
+            Use the prior in the acquisition rule (True by default)
 
         """
         super(MaxVar, self).__init__(*args, **opts)
@@ -357,6 +363,7 @@ class MaxVar(AcquisitionBase):
         self.quantile_eps = quantile_eps
         # The ABC threshold is initialised to a pre-set value as the gp is not yet fit.
         self.eps = .1
+        self.use_prior = use_prior
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -398,6 +405,9 @@ class MaxVar(AcquisitionBase):
         # Using the same location for all points in theta batch.
         batch_theta = np.tile(theta_max, (n, 1))
 
+        # Add noise for more efficient fitting of GP
+        batch_theta = self._add_noise(batch_theta)
+
         return batch_theta
 
     def evaluate(self, theta_new, t=None):
@@ -426,9 +436,12 @@ class MaxVar(AcquisitionBase):
         phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
         var_p_a = phi_skew - phi_norm**2
 
-        val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+        if self.use_prior:
+            val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+            var_approx_posterior = val_prior**2 * var_p_a
+        else:
+            var_approx_posterior = var_p_a
 
-        var_approx_posterior = val_prior**2 * var_p_a
         return var_approx_posterior
 
     def evaluate_gradient(self, theta_new, t=None):
@@ -469,14 +482,18 @@ class MaxVar(AcquisitionBase):
             (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b +
                 (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) * (1. - 2. * phi(a * b)) * grad_a))
 
-        # Obtaining the gradient prior by applying the following rule:
-        # (log f(x))' = f'(x)/f(x) => f'(x) = (log f(x))' * f(x)
-        term_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
-        grad_prior_log = self.prior.gradient_logpdf(theta_new)
-        term_grad_prior = term_prior * grad_prior_log
+        if self.use_prior:
+            # Obtaining the gradient prior by applying the following rule:
+            # (log f(x))' = f'(x)/f(x) => f'(x) = (log f(x))' * f(x)
+            term_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+            grad_prior_log = self.prior.gradient_logpdf(theta_new)
+            term_grad_prior = term_prior * grad_prior_log
 
-        gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
-            term_prior**2 * (grad_int_1 - grad_int_2)
+            gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
+                term_prior**2 * (grad_int_1 - grad_int_2)
+        else:
+            gradient = grad_int_1 - grad_int_2
+            
         return gradient
 
 
@@ -644,14 +661,17 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
+    def __init__(self, parametric=False, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
                  sigma_proposals_metropolis=None, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
         ----------
-        quantile_eps : int, optional
+        parametric : bool, optional
+            True if the model works with a parametric approximation of the likelihood,
+            False otherwise. Default False.
+        quantile_eps : float, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
         integration : str, optional
             Integration method. Options:
@@ -678,6 +698,7 @@ class ExpIntVar(MaxVar):
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
+        self.parametric = parametric
         self._integration = integration
         self._n_samples_imp = n_samples_imp
         self._iter_imp = iter_imp
@@ -694,6 +715,37 @@ class ExpIntVar(MaxVar):
         elif self._integration == 'grid':
             grid_param = [slice(b[0], b[1], d_grid) for b in self.model.bounds]
             self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T
+
+    def _update_attributes(self, t):
+        gp = self.model
+        self.sigma2_n = gp.gp_params['kernel'].white.variance.values[0] if hasattr(gp.gp_params['kernel'], "white") else gp.noise
+
+        # Updating the discrepancy threshold.
+        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
+
+        # Performing the importance sampling step every self._iter_imp iterations.
+        if self._integration == 'importance' and t % self._iter_imp == 0:
+            self.points_int = self.density_is.acquire(self._n_samples_imp)
+        
+        # Obtaining the omegas_int and priors_int terms to be used in the evaluate function.
+        self.mean_int, self.var_int = gp.predict(self.points_int, noiseless=True)
+        self.priors_int = (np.squeeze(self.prior.pdf(self.points_int))**2)[np.newaxis, :]
+        if self._integration == 'importance' and t % self._iter_imp == 0:
+            omegas_int_unnormalised = (1 / MaxVar.evaluate(self, self.points_int)).T
+            self.omegas_int = omegas_int_unnormalised / \
+                np.sum(omegas_int_unnormalised, axis=1)[:, np.newaxis]
+        elif self._integration == 'grid':
+            self.omegas_int = np.empty(len(self.points_int))
+            self.omegas_int.fill(1 / len(self.points_int))
+
+        # Initialising the attributes used in the evaluate function.
+        self.thetas_old = np.array(gp.X)
+        self._K = gp._gp.kern.K
+        self.K = self._K(self.thetas_old, self.thetas_old) + \
+            self.sigma2_n * np.identity(self.thetas_old.shape[0])
+        self.k_int_old = self._K(self.points_int, self.thetas_old).T
+        self.phi_int = ss.norm.cdf(self.eps, loc=self.mean_int.T,
+                                   scale=np.sqrt(self.sigma2_n + self.var_int.T))
 
     def acquire(self, n, t):
         """Acquire a batch of acquisition points.
@@ -713,34 +765,7 @@ class ExpIntVar(MaxVar):
         """
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
-        self.sigma2_n = gp.noise
-
-        # Updating the discrepancy threshold.
-        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
-
-        # Performing the importance sampling step every self._iter_imp iterations.
-        if self._integration == 'importance' and t % self._iter_imp == 0:
-            self.points_int = self.density_is.acquire(self._n_samples_imp)
-
-        # Obtaining the omegas_int and priors_int terms to be used in the evaluate function.
-        self.mean_int, self.var_int = gp.predict(self.points_int, noiseless=True)
-        self.priors_int = (self.prior.pdf(self.points_int)**2)[np.newaxis, :]
-        if self._integration == 'importance' and t % self._iter_imp == 0:
-            omegas_int_unnormalised = (1 / MaxVar.evaluate(self, self.points_int)).T
-            self.omegas_int = omegas_int_unnormalised / \
-                np.sum(omegas_int_unnormalised, axis=1)[:, np.newaxis]
-        elif self._integration == 'grid':
-            self.omegas_int = np.empty(len(self.points_int))
-            self.omegas_int.fill(1 / len(self.points_int))
-
-        # Initialising the attributes used in the evaluate function.
-        self.thetas_old = np.array(gp.X)
-        self._K = gp._gp.kern.K
-        self.K = self._K(self.thetas_old, self.thetas_old) + \
-            self.sigma2_n * np.identity(self.thetas_old.shape[0])
-        self.k_int_old = self._K(self.points_int, self.thetas_old).T
-        self.phi_int = ss.norm.cdf(self.eps, loc=self.mean_int.T,
-                                   scale=np.sqrt(self.sigma2_n + self.var_int.T))
+        self._update_attributes(t)
 
         # Obtaining the location where the expected loss is minimised.
         # Note: The gradient is computed numerically as GPy currently does not
@@ -755,6 +780,10 @@ class ExpIntVar(MaxVar):
 
         # Using the same location for all points in the batch.
         batch_theta = np.tile(theta_min, (n, 1))
+        
+        # Add noise for more efficient fitting of GP
+        batch_theta = self._add_noise(batch_theta)
+        
         return batch_theta
 
     def evaluate(self, theta_new, t=None):
@@ -773,6 +802,9 @@ class ExpIntVar(MaxVar):
             Expected loss's term dependent on theta_new.
 
         """
+        if not hasattr(self, '_K'):
+            self._update_attributes(t)
+        
         gp = self.model
         n_imp, n_dim = self.points_int.shape
         # Alter the shape of theta_new.
@@ -791,16 +823,21 @@ class ExpIntVar(MaxVar):
         term_chol = sl.cho_solve(sl.cho_factor(self.K), k_old_new)
         cov_int = k_int_new - np.dot(self.k_int_old.T, term_chol).T
         delta_var_int = cov_int**2 / (self.sigma2_n + var_new)
-        a = np.sqrt((self.sigma2_n + self.var_int.T - delta_var_int) /
-                    (self.sigma2_n + self.var_int.T + delta_var_int))
-        # Using the skewnorm's cdf to substitute the Owen's T function.
-        phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=self.mean_int.T,
-                                       scale=np.sqrt(self.sigma2_n + self.var_int.T))
-        w = ((self.phi_int - phi_skew_imp) / 2)
+        
+        if self.parametric:
+            w = (self.sigma2_n + self.var_int.T - delta_var_int)/4. * np.exp(-self.mean_int.T)
+        else:
+            a = np.sqrt((self.sigma2_n + self.var_int.T - delta_var_int) /
+                        (self.sigma2_n + self.var_int.T + delta_var_int))
+            a[np.isnan(a)] = 0.
+            # Using the skewnorm's cdf to substitute the Owen's T function.
+            # Formula: 2T((x-loc)/scale,a) = norm.cdf(x,loc,scale) - skewnorm(x,a,loc,scale)
+            phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=self.mean_int.T,
+                                        scale=np.sqrt(self.sigma2_n + self.var_int.T))
+            w = self.phi_int - phi_skew_imp
 
-        loss_theta_new = 2 * np.sum(self.omegas_int * self.priors_int * w, axis=1)
+        loss_theta_new = np.sum(self.omegas_int * self.priors_int * w, axis=1)
         return loss_theta_new
-
 
 class UniformAcquisition(AcquisitionBase):
     """Acquisition from uniform distribution."""
