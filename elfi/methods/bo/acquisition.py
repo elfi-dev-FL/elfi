@@ -661,7 +661,7 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, parametric=False, quantile_eps=.01, integration='grid', d_grid=.2,
+    def __init__(self, parametric=False, log_discrepancy=False, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
                  sigma_proposals_metropolis=None, *args, **opts):
         """Initialise ExpIntVar.
@@ -671,6 +671,9 @@ class ExpIntVar(MaxVar):
         parametric : bool, optional
             True if the model works with a parametric approximation of the likelihood,
             False otherwise. Default False.
+        log_discrepancy : bool, optional
+            True if the model uses the log of the discrepancy,
+            False otherwise. Default False.
         quantile_eps : float, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
         integration : str, optional
@@ -679,7 +682,7 @@ class ExpIntVar(MaxVar):
             computationally expensive in high dimensions;
             - importance (points are taken based on the importance weight): less accurate though
             applicable in high dimensions.
-        d_grid : float, optional
+        d_grid : float or array_like, optional
             Grid tightness.
         n_samples_imp : int, optional
             Number of importance samples.
@@ -699,6 +702,7 @@ class ExpIntVar(MaxVar):
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
         self.parametric = parametric
+        self.log_discrepancy = log_discrepancy
         self._integration = integration
         self._n_samples_imp = n_samples_imp
         self._iter_imp = iter_imp
@@ -713,7 +717,8 @@ class ExpIntVar(MaxVar):
                                          n_samples=n_samples,
                                          sigma_proposals_metropolis=sigma_proposals_metropolis)
         elif self._integration == 'grid':
-            grid_param = [slice(b[0], b[1], d_grid) for b in self.model.bounds]
+            d_grid = np.ones(len(self.model.bounds))*d_grid if isinstance(d_grid, float) else d_grid
+            grid_param = [slice(b[0], b[1], d_grid[i]) for i, b in enumerate(self.model.bounds)]
             self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T
 
     def _update_attributes(self, t):
@@ -825,7 +830,11 @@ class ExpIntVar(MaxVar):
         delta_var_int = cov_int**2 / (self.sigma2_n + var_new)
         
         if self.parametric:
-            w = (self.sigma2_n + self.var_int.T - delta_var_int)/4. * np.exp(-self.mean_int.T)
+            sigma2_new = self.sigma2_n + self.var_int.T - delta_var_int
+            if self.log_discrepancy:
+                w = ((np.exp(sigma2_new) - 1.)*np.exp(2*self.mean_int.T + sigma2_new)) * np.exp(-self.mean_int.T + self.mean_int.T.min())/4.
+            else:
+                w = sigma2_new * np.exp(-self.mean_int.T + self.mean_int.T.min())/4.
         else:
             a = np.sqrt((self.sigma2_n + self.var_int.T - delta_var_int) /
                         (self.sigma2_n + self.var_int.T + delta_var_int))
