@@ -1,10 +1,9 @@
-
 Quickstart
 ==========
 
 First ensure you have
 `installed <http://elfi.readthedocs.io/en/stable/installation.html>`__
-Python 3.5 (or greater) and ELFI. After installation you can start using
+Python 3.6 (or greater) and ELFI. After installation you can start using
 ELFI:
 
 .. code:: ipython3
@@ -28,7 +27,7 @@ for the standard deviation ``sigma``. All distributions from
 For likelihood-free models we typically need to define a simulator and
 summary statistics for the data. As an example, lets define the
 simulator as 30 draws from a Gaussian distribution with a given mean and
-standard deviation. Let's use mean and variance as our summaries:
+standard deviation. Let’s use mean and variance as our summaries:
 
 .. code:: ipython3
 
@@ -125,7 +124,7 @@ posterior using threshold value 0.5:
     
 
 
-Let's plot also the marginal distributions for the parameters:
+Let’s plot also the marginal distributions for the parameters:
 
 .. code:: ipython3
 

@@ -260,8 +260,8 @@ class ElfiModel(GraphicalModel):
                              "name as the key")
         self.source_net.graph['observed'] = observed
 
-    def generate(self, batch_size=1, outputs=None, with_values=None):
-        """Generate a batch of outputs using the global numpy seed.
+    def generate(self, batch_size=1, outputs=None, with_values=None, seed=None):
+        """Generate a batch of outputs.
 
         This method is useful for testing that the ELFI graph works.
 
@@ -271,6 +271,8 @@ class ElfiModel(GraphicalModel):
         outputs : list, optional
         with_values : dict, optional
             You can specify values for nodes to use when generating data
+        seed : int, optional
+            Defaults to global numpy seed.
 
         """
         if outputs is None:
@@ -280,11 +282,14 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
+        if seed is None:
+            seed = 'global'
+
         pool = None
         if with_values is not None:
             pool = OutputPool(with_values.keys())
             pool.add_batch(with_values, 0)
-        context = ComputationContext(batch_size, seed='global', pool=pool)
+        context = ComputationContext(batch_size, seed=seed, pool=pool)
 
         client = elfi.client.get_client()
         compiled_net = client.compile(self.source_net, outputs)
@@ -299,7 +304,7 @@ class ElfiModel(GraphicalModel):
         name : str
 
         """
-        cls = self.get_node(name)['_class']
+        cls = self.get_node(name)['attr_dict']['_class']
         return cls.reference(name, self)
 
     def get_state(self, name):
@@ -310,7 +315,7 @@ class ElfiModel(GraphicalModel):
         name : str
 
         """
-        return self.source_net.node[name]
+        return self.source_net.nodes[name]
 
     def update_node(self, name, updating_name):
         """Update `node` with `updating_node` in the model.
@@ -352,7 +357,7 @@ class ElfiModel(GraphicalModel):
     @property
     def parameter_names(self):
         """Return a list of model parameter names in an alphabetical order."""
-        return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
+        return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)['attr_dict']])
 
     @parameter_names.setter
     def parameter_names(self, parameter_names):
@@ -369,7 +374,7 @@ class ElfiModel(GraphicalModel):
         """
         parameter_names = set(parameter_names)
         for n in self.nodes:
-            state = self.get_state(n)
+            state = self.get_state(n)['attr_dict']
             if n in parameter_names:
                 parameter_names.remove(n)
                 state['_parameter'] = True
@@ -448,11 +453,11 @@ class InstructionsMapper:
 
     @property
     def uses_meta(self):
-        return self.state.get('_uses_meta', False)
+        return self.state['attr_dict'].get('_uses_meta', False)
 
     @uses_meta.setter
     def uses_meta(self, val):
-        self.state['_uses_meta'] = True
+        self.state['attr_dict']['_uses_meta'] = val
 
 
 class NodeReference(InstructionsMapper):
@@ -656,13 +661,13 @@ class NodeReference(InstructionsMapper):
         info = inspect.getframeinfo(frame, 1)
 
         # Skip super calls to find the assignment frame
-        while re.match('\s*super\(', info.code_context[0]):
+        while re.match(r'\s*super\(', info.code_context[0]):
             frame = frame.f_back
             info = inspect.getframeinfo(frame, 1)
 
         # Match simple direct assignment with the class name, no commas or semicolons
         # Also do not accept a name starting with an underscore
-        rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
+        rex = r'\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
         match = re.match(rex, info.code_context[0])
         if match:
             name = match.groups()[0]
@@ -822,7 +827,7 @@ class RandomVariable(StochasticMixin, NodeReference):
     @property
     def distribution(self):
         """Return the distribution object."""
-        distribution = self['distribution']
+        distribution = self.state['attr_dict']['distribution']
         if isinstance(distribution, str):
             distribution = scipy_from_str(distribution)
         return distribution
@@ -881,7 +886,7 @@ class Prior(RandomVariable):
 
         """
         super(Prior, self).__init__(distribution, *params, size=size, **kwargs)
-        self['_parameter'] = True
+        self['attr_dict']['_parameter'] = True
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
