@@ -2,7 +2,7 @@
 .idea
 
 # Byte-compiled / optimized / DLL files
-__pycache__/
+**/__pycache__
 *.py[cod]
 *$py.class
 
@@ -12,19 +12,19 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
+env
+build
+develop-eggs
+dist
+downloads
+eggs
+.eggs
+lib
+lib64
+parts
+sdist
+var
+*.egg-info
 .installed.cfg
 *.egg
 
@@ -46,14 +46,14 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
-.tox/
+.tox
 .coverage
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
-*,cover
-.hypothesis/
+*cover
+.hypothesis
 
 # Translations
 *.mo
@@ -64,17 +64,17 @@ coverage.xml
 local_settings.py
 
 # Flask stuff:
-instance/
+instance
 .webassets-cache
 
 # Scrapy stuff:
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+docs/_build
 
 # PyBuilder
-target/
+target
 
 # IPython Notebook
 .ipynb_checkpoints
@@ -89,9 +89,9 @@ celerybeat-schedule
 .env
 
 # virtualenv
-venv/
-ENV/
-.venv/
+venv
+ENV
+.venv
 
 # Spyder project settings
 .spyderproject
@@ -104,10 +104,6 @@ ENV/
 *.swo
 *.swp
 
-notebooks/mydask.png
-
-# vscode-settings
-.vscode
-
-# dask
-dask-worker-space
+# Compiled stuff
+bdm
+elfi/examples/cpp/bdm

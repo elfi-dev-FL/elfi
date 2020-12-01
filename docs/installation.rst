@@ -3,7 +3,7 @@
 Installation
 ============
 
-ELFI requires Python 3.5 or greater (see below how to install). To install ELFI, simply
+ELFI requires Python 3.6 or greater (see below how to install). To install ELFI, simply
 type in your terminal:
 
 .. code-block:: console
@@ -18,16 +18,16 @@ process.
 .. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
 
 
-Installing Python 3.5
+Installing Python 3.6
 ---------------------
 
 If you are new to Python, perhaps the simplest way to install it is with Anaconda_ that
-manages different Python versions. After installing Anaconda, you can create a Python 3.5.
+manages different Python versions. After installing Anaconda, you can create a Python 3.6.
 environment with ELFI:
 
 .. code-block:: console
 
-    conda create -n elfi python=3.5 numpy
+    conda create -n elfi python=3.6 numpy
     source activate elfi
     pip install elfi
 
@@ -51,7 +51,7 @@ Resolving these may sometimes go wrong:
 * If you receive an error about missing ``numpy``, please install it first.
 * If you receive an error about `yaml.load`, install ``pyyaml``.
 * On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
-* Note that ELFI requires Python 3.5 or greater
+* Note that ELFI requires Python 3.6 or greater
 * In some environments ``pip`` refers to Python 2.x, and you have to use ``pip3`` to use the Python 3.x version
 * Make sure your Python installation meets the versions listed in requirements_.
 
@@ -89,3 +89,27 @@ means the current folder.
 .. _Github repo: https://github.com/elfi-dev/elfi
 .. _tarball: https://github.com/elfi-dev/elfi/tarball/dev
 
+Docker container
+----------------
+
+A simple Dockerfile with Jupyter support is also provided. This is especially suitable 
+for running tests. Please see `Docker documentation`_ for details.
+
+.. _Docker documentation: https://docs.docker.com/
+
+.. code-block:: console
+
+    git clone --depth 1 https://github.com/elfi-dev/elfi.git
+    cd elfi
+    make docker-build  # builds the image with requirements for dev
+    make docker  # runs a container with live elfi directory
+
+To open a Jupyter notebook, run
+
+.. code-block:: console
+    
+    jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+
+within the container and then on host open the page `localhost:8888`_.
+
+.. _localhost:8888: http://localhost:8888
